@@ -1,23 +1,39 @@
-import joblib
-import tensorflow as tf
-import keras_tuner as kt
 import pandas as pd
-from tensorflow import keras
-from keras import regularizers
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import numpy as np
+import joblib
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.model_selection import train_test_split
+import copy
 
+# =====================
+# Use GPU if available
+# =====================
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using {device}")
+
+
+# =============
+# Prepare data
+# =============
 data = pd.read_csv("all_car_adverts_cleaned3.csv")
 data['age_miles'] = data['age'] * data['miles']
 
-X = data[['make', 'model', 'age', 'body_type', 'miles', 'num_owner', 'age_miles']]
+X = data[['make', 'model', 'age', 'body_type', 'miles', 'age_miles']]
 y = data['car_price']
-X_training, X_testing, y_training, y_testing = train_test_split(X, y, test_size=0.2, random_state=66)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=66)
 
-numerical_features = ['age', 'miles', 'num_owner', 'age_miles']
+
+# ==============
+# Preprocessing
+# ==============
+numerical_features = ['age', 'miles', 'age_miles']
 categorical_features = ['make', 'model', 'body_type']
 
 numerical_transformer = Pipeline(steps=[
@@ -37,30 +53,124 @@ preprocessor = ColumnTransformer(
 
 # Fit the preprocessor and transform the data
 # preprocessor.pkl is needed by the Flask Server
-X_train_transformed = preprocessor.fit_transform(X_training)
-X_train_transformed = X_train_transformed.toarray() if hasattr(X_train_transformed, 'toarray') else X_train_transformed
-X_test_transformed = preprocessor.transform(X_testing)
-X_test_transformed = X_test_transformed.toarray() if hasattr(X_test_transformed, 'toarray') else X_test_transformed
+X_train_transformed = preprocessor.fit_transform(X_train)
+X_test_transformed = preprocessor.transform(X_test)
 joblib.dump(preprocessor, './preprocessor.pkl')
 
-# Define, compile and train the model
-model = keras.Sequential([
-    keras.layers.Dense(256, activation='relu', input_dim=X_train_transformed.shape[1], kernel_regularizer=regularizers.l2(0.01)),
-    keras.layers.Dropout(0.3),
-    keras.layers.Dense(128, activation='relu'),
-    keras.layers.Dropout(0.2),
-    keras.layers.Dense(64, activation='relu'),
-    keras.layers.Dense(1)
-])
-model.compile(loss='mean_squared_error', optimizer=keras.optimizers.Adam(0.001))
 
-training = model.fit(X_train_transformed, y_training, validation_data=(X_test_transformed, y_testing), epochs=200, batch_size=128, verbose=1)
+# ========
+# Tensors
+# ========
+# Convert to torch tensor (required for pyTorch)
+X_train_tensor = torch.tensor(X_train_transformed, dtype=torch.float32)
+y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).view(-1, 1)
 
-early_stopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)  # Early stopping
-mse = model.evaluate(X_test_transformed, y_testing, verbose=0, callbacks=[early_stopping])
+X_test_tensor = torch.tensor(X_test_transformed, dtype=torch.float32)
+y_test_tensor = torch.tensor(y_test.values, dtype=torch.float32).view(-1, 1)
+
+
+# Dataset and DataLoaders used for ease and performance
+train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=128)
+
+
+# ======
+# Model
+# ======
+class CarPriceModel(nn.Module):
+    # Define model architecture
+    def __init__(self, input_dim):
+        super(CarPriceModel, self).__init__()
+        self.fc1 = nn.Linear(input_dim, 256)
+        self.dropout1 = nn.Dropout(0.3)
+        self.fc2 = nn.Linear(256, 128)
+        self.dropout2 = nn.Dropout(0.2)
+        self.fc3 = nn.Linear(128, 64)
+        self.output = nn.Linear(64, 1)
+
+    # Use model architecture - automatically called by pyTorch
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = self.dropout1(x)
+        x = F.relu(self.fc2(x))
+        x = self.dropout2(x)
+        x = F.relu(self.fc3(x))
+        return self.output(x)
+model = CarPriceModel(input_dim=X_train_tensor.shape[1]).to(device)
+
+
+# =========
+# Training
+# =========
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+best_loss = np.inf
+best_model = copy.deepcopy(model.state_dict())
+no_improvement = 0
+
+for epoch in range(200):
+    model.train()
+    running_loss = 0.0
+    for inputs, targets in train_loader:
+        inputs = inputs.to(device)
+        targets = targets.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item() * inputs.size(0)
+
+    avg_train_loss = running_loss / len(train_loader.dataset)
+
+    # Validation
+    model.eval()
+    val_loss = 0.0
+    with torch.no_grad():
+        for inputs, targets in test_loader:
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            val_loss += loss.item() * inputs.size(0)
+    val_loss /= len(test_loader.dataset)
+
+    print(f"Epoch {epoch + 1}: Train Loss = {avg_train_loss:.4f}, Val Loss = {val_loss:.4f}")
+
+    # Early stopping
+    if val_loss < best_loss:
+        best_loss = val_loss
+        best_model = copy.deepcopy(model.state_dict())
+        no_improvement = 0
+    else:
+        no_improvement += 1
+        if no_improvement >= 10:
+            print("Early stopping")
+            break
+model.load_state_dict(best_model)
+
+
+# ===========
+# Evaluation
+# ===========
+model.eval()
+with torch.no_grad():
+    X_test_tensor_device = X_test_tensor.to(device)
+    y_test_tensor_device = y_test_tensor.to(device)
+    predictions = model(X_test_tensor_device)
+    mse = criterion(predictions, y_test_tensor_device).item()
 print("Mean Squared Error:", mse)
 
+
+# =============
 # Test predict
+# =============
 input_data = pd.DataFrame({
     'make': ['Volkswagen', 'Ford'],
     'model': ['Jetta', 'Focus'],
@@ -69,13 +179,17 @@ input_data = pd.DataFrame({
     'miles': [146000, 30546],
     'age_miles': [1898000, 122184]
 })
-preprocessed_input = preprocessor.transform(input_data)
-preprocessed_input = preprocessed_input.toarray() if hasattr(preprocessed_input, 'toarray') else preprocessed_input
+# Expected results are: ~2750 and ~11490
 
-predictions = model.predict(preprocessed_input)
-print("Predicted Prices:")
-for prediction in predictions:
-    print(prediction)
+preprocessed_input = preprocessor.transform(input_data)
+preprocessed_input_tensor = torch.tensor(preprocessed_input, dtype=torch.float32).to(device)
+
+with torch.no_grad():
+    prediction = model(preprocessed_input_tensor).cpu().numpy()
+
+print("\nPredicted Prices:")
+for p in prediction:
+    print(f"£{p[0]:,.2f}")
 
 # Save the model to be used by the Flask Server
-tf.keras.models.save_model(model, './tf_model')
+torch.save(model.state_dict(), './car_price_model.pt')
