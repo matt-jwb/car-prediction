@@ -2,15 +2,33 @@ import joblib
 from flask import Flask, request, jsonify
 import pandas as pd
 from flask_cors import CORS
-import tensorflow as tf
+import torch
+import numpy as np
+
+from model import CarPriceModel
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 app = Flask(__name__)
 CORS(app)
 
-model = tf.keras.models.load_model('./tf_model')
-
 preprocessor = joblib.load('./preprocessor.pkl')
 
+input_data = pd.DataFrame({
+    'make': ['Volkswagen'],
+    'model': ['Jetta'],
+    'age': [13],
+    'body_type': ['saloon'],
+    'miles': [146000],
+    'age_miles': [1898000]
+})
+input_dim = preprocessor.transform(input_data).shape[1]
+
+
+model = CarPriceModel(input_dim)
+model.load_state_dict(torch.load('./car_price_model.pt', map_location=device))
+model.to(device)
+model.eval()
 
 @app.route('/')
 def home():
@@ -24,14 +42,15 @@ def predict():
 
     data_frame['age'] = pd.to_numeric(data_frame['age'], errors='coerce')
     data_frame['miles'] = pd.to_numeric(data_frame['miles'], errors='coerce')
-    data_frame['num_owner'] = pd.to_numeric(data_frame['num_owner'], errors='coerce')
 
     data_frame['age_miles'] = data_frame['age'] * data_frame['miles']
 
     preprocessed_input = preprocessor.transform(data_frame)
-    predictions = model.predict(preprocessed_input)
+    input_tensor = torch.tensor(preprocessed_input, dtype=torch.float32).to(device)
 
-    predicted_price = float(predictions[0][0])
+    with torch.no_grad():
+        prediction_log = model(input_tensor).cpu().numpy()
+    predicted_price = float(np.expm1(prediction_log).item())
 
     return jsonify({'predicted_price': predicted_price})
 

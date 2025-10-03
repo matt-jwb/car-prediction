@@ -7,7 +7,6 @@ function App() {
   const [bodyType, setBodyType] = useState('');
   const [miles, setMiles] = useState('');
   const [age, setAge] = useState('');
-  const [numOwner, setnumOwner] = useState('');
   const [predictedPrice, setPredictedPrice] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,7 +19,6 @@ function App() {
       "body_type": bodyType,
       "miles": miles,
       "age": age,
-      "num_owner": numOwner
     };
     setLoading(true);
 
@@ -35,7 +33,7 @@ function App() {
       const data = await response.json();
       setPredictedPrice(data.predicted_price);
       setError('');
-    } 
+    }
     catch (error) {
       console.error("Error:", error);
       setError('Failed to fetch predicted price');
@@ -50,19 +48,19 @@ function App() {
     <div className="container">
       <h1>Car Price Predictor</h1>
       <form onSubmit={handleSubmit}>
-        <input 
-          type="text" 
-          placeholder="Make" 
-          value={make} 
-          onChange={(e) => setMake(e.target.value)} 
-          required 
+        <input
+          type="text"
+          placeholder="Make"
+          value={make}
+          onChange={(e) => setMake(e.target.value)}
+          required
         />
-        <input 
-          type="text" 
-          placeholder="Model" 
-          value={model} 
-          onChange={(e) => setModel(e.target.value)} 
-          required 
+        <input
+          type="text"
+          placeholder="Model"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          required
         />
         <select value={bodyType} onChange={(e) => setBodyType(e.target.value)} required>
           <option value="" disabled>Select Body Type</option>
@@ -74,26 +72,19 @@ function App() {
           <option value="pickup">Pickup</option>
           <option value="convertible">Convertible</option>
         </select>
-        <input 
-          type="number" 
-          placeholder="Mileage" 
-          value={miles} 
-          onChange={(e) => setMiles(e.target.value)} 
-          required 
+        <input
+          type="number"
+          placeholder="Mileage"
+          value={miles}
+          onChange={(e) => setMiles(e.target.value)}
+          required
         />
-        <input 
-          type="number" 
-          placeholder="Age" 
-          value={age} 
-          onChange={(e) => setAge(e.target.value)} 
-          required 
-        />
-        <input 
-          type="number" 
-          placeholder="Number of owners" 
-          value={numOwner} 
-          onChange={(e) => setnumOwner(e.target.value)} 
-          required 
+        <input
+          type="number"
+          placeholder="Age"
+          value={age}
+          onChange={(e) => setAge(e.target.value)}
+          required
         />
         <button type="submit" disabled={loading}>Predict Price</button>
         </form>

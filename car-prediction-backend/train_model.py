@@ -3,7 +3,6 @@ import numpy as np
 import joblib
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -11,6 +10,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.model_selection import train_test_split
 import copy
+from model import CarPriceModel
 
 # =====================
 # Use GPU if available
@@ -80,25 +80,6 @@ test_loader = DataLoader(test_dataset, batch_size=128)
 # ======
 # Model
 # ======
-class CarPriceModel(nn.Module):
-    # Define model architecture
-    def __init__(self, input_dim):
-        super(CarPriceModel, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 256)
-        self.dropout1 = nn.Dropout(0.3)
-        self.fc2 = nn.Linear(256, 128)
-        self.dropout2 = nn.Dropout(0.2)
-        self.fc3 = nn.Linear(128, 64)
-        self.output = nn.Linear(64, 1)
-
-    # Use model architecture - automatically called by pyTorch
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = self.dropout1(x)
-        x = F.relu(self.fc2(x))
-        x = self.dropout2(x)
-        x = F.relu(self.fc3(x))
-        return self.output(x)
 model = CarPriceModel(input_dim=X_train_tensor.shape[1]).to(device)
 
 
