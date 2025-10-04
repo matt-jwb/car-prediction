@@ -3,13 +3,13 @@ import numpy as np
 import joblib
 import torch
 import torch.nn as nn
+import copy
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.model_selection import train_test_split
-import copy
 from model import CarPriceModel
 
 # =====================
@@ -62,11 +62,14 @@ joblib.dump(preprocessor, './preprocessor.pkl')
 # Tensors
 # ========
 # Convert to torch tensor (required for pyTorch)
-X_train_tensor = torch.tensor(X_train_transformed, dtype=torch.float32)
-y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).view(-1, 1)
 
+y_train_log = np.log1p(y_train)
+y_test_log = np.log1p(y_test)
+y_train_tensor = torch.tensor(y_train_log.values, dtype=torch.float32).view(-1,1)
+y_test_tensor = torch.tensor(y_test_log.values, dtype=torch.float32).view(-1,1)
+
+X_train_tensor = torch.tensor(X_train_transformed, dtype=torch.float32)
 X_test_tensor = torch.tensor(X_test_transformed, dtype=torch.float32)
-y_test_tensor = torch.tensor(y_test.values, dtype=torch.float32).view(-1, 1)
 
 
 # Dataset and DataLoaders used for ease and performance
@@ -166,7 +169,8 @@ preprocessed_input = preprocessor.transform(input_data)
 preprocessed_input_tensor = torch.tensor(preprocessed_input, dtype=torch.float32).to(device)
 
 with torch.no_grad():
-    prediction = model(preprocessed_input_tensor).cpu().numpy()
+    prediction_log = model(preprocessed_input_tensor).cpu().numpy()
+prediction = np.expm1(prediction_log)
 
 print("\nPredicted Prices:")
 for p in prediction:
