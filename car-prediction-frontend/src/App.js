@@ -91,7 +91,8 @@ function App() {
         {loading && <div>Loading...</div>} {/* Loading indicator */}
         {predictedPrice && !loading && (
           <div className="result">
-            <h2>Predicted Price: £{predictedPrice.toFixed(2)}</h2>
+            /* undefined makes use of User's local settings */
+            <h2>Predicted Price: £{predictedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
           </div>
         )}
         {error && <div className="error">{error}</div>}
