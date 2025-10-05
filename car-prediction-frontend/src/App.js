@@ -88,10 +88,10 @@ function App() {
         />
         <button type="submit" disabled={loading}>Predict Price</button>
         </form>
-        {loading && <div>Loading...</div>} {/* Loading indicator */}
+        {loading && <div className="spinner"></div>}
         {predictedPrice && !loading && (
           <div className="result">
-            /* undefined makes use of User's local settings */
+            {/* undefined makes use of User's local settings */}
             <h2>Predicted Price: £{predictedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
           </div>
         )}
