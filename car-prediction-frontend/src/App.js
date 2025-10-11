@@ -87,21 +87,17 @@ function App() {
           required
         />
         <button type="submit" disabled={loading}>Predict Price</button>
-        </form>
-        {loading && <div className="spinner"></div>}
-        {predictedPrice && !loading && (
-          <div className="result">
+      </form>
+      {loading && <div className="spinner"></div>}
+      {predictedPrice && !loading && (
+        <div className="result">
             {/* undefined makes use of User's local settings */}
             <h2>Predicted Price: £{predictedPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
-          </div>
-        )}
-        {error && <div className="error">{error}</div>}
-      </div>
+        </div>
+      )}
+      {error && <div className="error">{error}</div>}
+    </div>
   );
 }
-//TODO Make sure design is responseive
-//TODO Make sure error messages are handled properly and prettily
-//TODO Consider input validation
-//TODO Improve loading indicator
 
 export default App;
